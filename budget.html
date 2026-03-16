@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Paisa — Budget Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ── RESET & VARS ── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0f0f11;--surface:#18181c;--surface2:#222228;--surface3:#2a2a32;
+  --border:#2e2e38;--border2:#3a3a46;
+  --text:#f0eff8;--muted:#7a798e;--faint:#3a3a46;
+  --accent:#7c6af7;--accent2:#5b4de8;--accentbg:rgba(124,106,247,.12);
+  --green:#22d37a;--greenbg:rgba(34,211,122,.1);
+  --red:#f05252;--redbg:rgba(240,82,82,.1);
+  --amber:#f5a623;--amberbg:rgba(245,166,35,.1);
+  --r:10px;--rl:16px;--rxl:22px;
+  --ff:'DM Sans',sans-serif;--fm:'DM Mono',monospace;
+}
+body{font-family:var(--ff);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;overflow-x:hidden}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* ── NAV ── */
+.topbar{position:sticky;top:0;z-index:200;background:rgba(15,15,17,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 16px}
+.topbar-inner{display:flex;align-items:center;gap:8px;height:52px}
+.logo{font-size:18px;font-weight:600;color:var(--text);letter-spacing:-.5px;flex-shrink:0}
+.logo span{color:var(--accent)}
+.nav-scroll{flex:1;overflow-x:auto;scrollbar-width:none;display:flex;gap:2px;padding:4px 0}
+.nav-scroll::-webkit-scrollbar{display:none}
+.nb{flex-shrink:0;padding:6px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);border-radius:var(--r);font-family:var(--ff);transition:all .18s;white-space:nowrap}
+.nb.active{background:var(--surface2);color:var(--text)}
+.nb:hover:not(.active){color:var(--text)}
+
+/* ── PAGES ── */
+.page{display:none;padding:16px 14px 90px;max-width:680px;margin:0 auto}.page.active{display:block}
+
+/* ── METRIC STRIP ── */
+.mstrip{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;position:relative;overflow:hidden}
+.mcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);opacity:.4;border-radius:var(--rl) var(--rl) 0 0}
+.mcard.g::before{background:var(--green)}
+.mcard.a::before{background:var(--amber)}
+.mcard.r::before{background:var(--red)}
+.ml{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.mv{font-size:22px;font-weight:600;letter-spacing:-.5px;font-family:var(--fm);line-height:1}
+.ms{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* ── SECTION CARD ── */
+.scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:12px}
+.scard-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+
+/* ── ADD FORM ── */
+.amount-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rl);padding:20px;margin-bottom:12px;text-align:center}
+.amt-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+.amt-input{background:none;border:none;outline:none;font-size:42px;font-weight:600;font-family:var(--fm);color:var(--text);text-align:center;width:100%;letter-spacing:-1px}
+.amt-input::placeholder{color:var(--faint)}
+
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.fg label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.fg input,.fg select,.fg textarea{
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);
+  padding:10px 12px;font-size:13px;color:var(--text);font-family:var(--ff);width:100%;
+  transition:border .15s;-webkit-appearance:none;appearance:none
+}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--accent)}
+.fgrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fg.full{grid-column:1/-1}
+
+/* ── CATEGORY GRID ── */
+.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px}
+@media(min-width:360px){.cat-grid{grid-template-columns:repeat(5,1fr)}}
+@media(min-width:480px){.cat-grid{grid-template-columns:repeat(7,1fr)}}
+.catbtn{
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;
+  border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);
+  cursor:pointer;transition:all .15s;font-size:9px;font-weight:500;color:var(--muted);
+  font-family:var(--ff);text-align:center;line-height:1.2
+}
+.catbtn .ci{font-size:19px;line-height:1;margin-bottom:2px}
+.catbtn.active{border-color:var(--accent);background:var(--accentbg);color:var(--accent)}
+.catbtn:hover:not(.active){border-color:var(--border2);color:var(--text)}
+
+/* ── ADD BUTTON ── */
+.btn-add{
+  width:100%;padding:16px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer;
+  font-family:var(--ff);transition:all .15s;letter-spacing:-.2px;margin-top:12px
+}
+.btn-add:hover{background:var(--accent2)}
+.btn-add:active{transform:scale(.98)}
+.btn-sm{background:none;border:1px solid var(--border);border-radius:var(--r);padding:7px 14px;font-size:11px;font-weight:500;cursor:pointer;color:var(--muted);font-family:var(--ff);transition:all .15s;white-space:nowrap}
+.btn-sm:hover{border-color:var(--border2);color:var(--text)}
+.btn-sm.accent{border-color:var(--accent);color:var(--accent)}
+.btn-sm.accent:hover{background:var(--accentbg)}
+.btn-sm.green{border-color:var(--green);color:var(--green)}
+.btn-sm.green:hover{background:var(--greenbg)}
+
+/* ── ENTRY ROW ── */
+.erow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.erow:last-child{border-bottom:none}
+.eicon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.einfo{flex:1;min-width:0}
+.edesc{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.emeta{font-size:10px;color:var(--muted);margin-top:2px}
+.eamt{font-size:14px;font-weight:600;font-family:var(--fm);white-space:nowrap;color:var(--text)}
+.edel{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:5px;border-radius:6px;opacity:.4;transition:all .15s;flex-shrink:0}
+.edel:hover{opacity:1;color:var(--red)}
+
+/* ── CHART WRAP ── */
+.cw{position:relative;width:100%}
+.cw.h160{height:160px}.cw.h180{height:180px}.cw.h200{height:200px}
+.cw.h220{height:220px}.cw.h240{height:240px}.cw.h260{height:260px}
+
+/* ── PERIOD NAV ── */
+.pnav{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.pnav button{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:7px 13px;cursor:pointer;font-size:14px;color:var(--muted);transition:all .15s}
+.pnav button:hover{color:var(--text);border-color:var(--border2)}
+.plabel{font-size:14px;font-weight:600;flex:1;text-align:center;color:var(--text)}
+
+/* ── TABLE ── */
+.bt{width:100%;border-collapse:collapse;font-size:12px}
+.bt th{color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.bt td{padding:9px 8px;border-bottom:1px solid var(--border);color:var(--text);font-size:12px}
+.bt tr:last-child td{border-bottom:none}
+.bt td.num{text-align:right;font-family:var(--fm);font-weight:500}
+.bt tr:hover td{background:var(--surface2)}
+
+/* ── PROG BAR ── */
+.pb{background:var(--surface3);border-radius:20px;height:4px;overflow:hidden;margin-top:4px}
+.pbf{height:100%;border-radius:20px;transition:width .5s}
+
+/* ── FILTER ── */
+.frow{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.frow select,.frow input{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-size:12px;color:var(--text);font-family:var(--ff);-webkit-appearance:none}
+.frow input{flex:1;min-width:100px}
+.frow select:focus,.frow input:focus{outline:none;border-color:var(--accent)}
+
+/* ── INSIGHT CARDS ── */
+.igrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.icard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px}
+.icard strong{display:block;font-size:15px;font-weight:600;font-family:var(--fm);margin-bottom:2px}
+.icard .ititle{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.icard .isub{font-size:10px;color:var(--muted)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface3);color:var(--text);padding:10px 20px;border-radius:24px;font-size:13px;font-weight:500;z-index:9999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);border:1px solid var(--border2);white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:36px 20px;color:var(--muted);font-size:13px}
+.empty .ei{font-size:36px;margin-bottom:8px;opacity:.4}
+
+/* ── HEATMAP ── */
+#hmgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:8px}
+.hc{aspect-ratio:1;border-radius:3px;cursor:default;transition:transform .1s}
+.hc:hover{transform:scale(1.25)}
+
+/* ── SYNC PANEL ── */
+.sync-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:12px}
+.sync-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sync-status{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.sync-status.ok{background:var(--green)}
+.sync-status.err{background:var(--red)}
+.sync-status.pending{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── CAT SHARE LIST ── */
+.csl-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.csl-item:last-child{border-bottom:none}
+
+/* ── BADGE ── */
+.badge{display:inline-flex;align-items:center;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500}
+
+/* ── DIVIDER ── */
+.divlabel{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between}
+
+@media(min-width:480px){.mstrip{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">pai<span>₹</span>a</div>
+    <div class="nav-scroll">
+      <button class="nb active" onclick="goPage('add',this)">＋ Add</button>
+      <button class="nb" onclick="goPage('daily',this)">Daily</button>
+      <button class="nb" onclick="goPage('weekly',this)">Weekly</button>
+      <button class="nb" onclick="goPage('monthly',this)">Monthly</button>
+      <button class="nb" onclick="goPage('category',this)">Categories</button>
+      <button class="nb" onclick="goPage('insights',this)">Insights</button>
+      <button class="nb" onclick="goPage('sheet',this)">Ledger</button>
+      <button class="nb" onclick="goPage('sync',this)">⚙ Sync</button>
+    </div>
+  </div>
+</div>
+
+<!-- METRIC STRIP (always visible) -->
+<div style="padding:12px 14px 0;max-width:680px;margin:0 auto">
+  <div class="mstrip">
+    <div class="mcard g"><div class="ml">Today</div><div class="mv" id="m-today">₹0</div><div class="ms" id="ms-today">0 entries</div></div>
+    <div class="mcard"><div class="ml">This Week</div><div class="mv" id="m-week">₹0</div><div class="ms" id="ms-week">0 entries</div></div>
+    <div class="mcard a"><div class="ml">This Month</div><div class="mv" id="m-month">₹0</div><div class="ms" id="ms-month">0 entries</div></div>
+    <div class="mcard r"><div class="ml">All Time</div><div class="mv" id="m-total">₹0</div><div class="ms" id="ms-total">0 entries</div></div>
+  </div>
+</div>
+
+<!-- ═══ ADD PAGE ═══ -->
+<div class="page active" id="page-add">
+  <div class="amount-wrap">
+    <div class="amt-label">Amount (₹)</div>
+    <input type="number" class="amt-input" id="f-amt" placeholder="0" min="0" step="1" inputmode="decimal">
+  </div>
+
+  <div class="scard">
+    <div class="scard-title">Category</div>
+    <div class="cat-grid" id="catgrid"></div>
+  </div>
+
+  <div class="scard">
+    <div class="scard-title">Details</div>
+    <div class="fgrow" style="margin-bottom:10px">
+      <div class="fg"><label>Date</label><input type="date" id="f-date"></div>
+      <div class="fg"><label>Payment</label>
+        <select id="f-pay"><option>Cash</option><option>UPI</option><option>Card</option><option>Net Banking</option><option>Wallet</option></select>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:10px"><label>Description</label><input type="text" id="f-desc" placeholder="What did you spend on?"></div>
+    <div class="fgrow">
+      <div class="fg"><label>Tag</label><input type="text" id="f-tag" placeholder="#work #family"></div>
+      <div class="fg"><label>Notes</label><input type="text" id="f-notes" placeholder="Optional"></div>
+    </div>
+    <button class="btn-add" onclick="addEntry()">Add Expense →</button>
+  </div>
+
+  <div class="scard">
+    <div class="scard-title">
+      <span>Today's Entries</span>
+      <span id="today-tot" style="font-family:var(--fm);color:var(--accent)"></span>
+    </div>
+    <div id="today-list"><div class="empty"><div class="ei">📋</div>No entries today yet</div></div>
+  </div>
+</div>
+
+<!-- ═══ DAILY PAGE ═══ -->
+<div class="page" id="page-daily">
+  <div class="pnav">
+    <button onclick="chDay(-1)">‹</button>
+    <span class="plabel" id="d-label"></span>
+    <button onclick="chDay(1)">›</button>
+    <button class="btn-sm" onclick="dailyD=new Date();rDaily()">Today</button>
+  </div>
+  <div class="mstrip">
+    <div class="mcard"><div class="ml">Spent</div><div class="mv" id="d-total">₹0</div></div>
+    <div class="mcard"><div class="ml">Entries</div><div class="mv" id="d-count">0</div></div>
+    <div class="mcard"><div class="ml">Top Category</div><div class="mv" id="d-top" style="font-size:13px">—</div></div>
+    <div class="mcard"><div class="ml">Avg/Entry</div><div class="mv" id="d-avg">₹0</div></div>
+  </div>
+  <div class="scard"><div class="scard-title">By Category</div><div class="cw h180"><canvas id="ch-d-bar"></canvas></div></div>
+  <div class="scard"><div class="scard-title">Entries</div><div id="d-list"></div></div>
+</div>
+
+<!-- ═══ WEEKLY PAGE ═══ -->
+<div class="page" id="page-weekly">
+  <div class="pnav">
+    <button onclick="chWeek(-1)">‹</button>
+    <span class="plabel" id="w-label"></span>
+    <button onclick="chWeek(1)">›</button>
+    <button class="btn-sm" onclick="weekOff=0;rWeekly()">This Week</button>
+  </div>
+  <div class="mstrip">
+    <div class="mcard"><div class="ml">Week Total</div><div class="mv" id="w-total">₹0</div></div>
+    <div class="mcard"><div class="ml">Daily Avg</div><div class="mv" id="w-avg">₹0</div></div>
+    <div class="mcard"><div class="ml">Peak Day</div><div class="mv" id="w-peak" style="font-size:13px">—</div></div>
+    <div class="mcard"><div class="ml">Entries</div><div class="mv" id="w-count">0</div></div>
+  </div>
+  <div class="scard"><div class="scard-title">Day-by-day spending</div><div class="cw h220"><canvas id="ch-w-bar"></canvas></div></div>
+  <div class="scard"><div class="scard-title">Category breakdown</div><div id="w-cats"></div></div>
+  <div class="scard"><div class="scard-title">All entries</div><div id="w-entries"></div></div>
+</div>
+
+<!-- ═══ MONTHLY PAGE ═══ -->
+<div class="page" id="page-monthly">
+  <div class="pnav">
+    <button onclick="chMonth(-1)">‹</button>
+    <span class="plabel" id="mo-label"></span>
+    <button onclick="chMonth(1)">›</button>
+    <button class="btn-sm" onclick="monthOff=0;rMonthly()">This Month</button>
+  </div>
+  <div class="mstrip">
+    <div class="mcard g"><div class="ml">Month Total</div><div class="mv" id="mo-total">₹0</div></div>
+    <div class="mcard"><div class="ml">Daily Avg</div><div class="mv" id="mo-avg">₹0</div></div>
+    <div class="mcard a"><div class="ml">Biggest Day</div><div class="mv" id="mo-peak" style="font-size:11px">—</div></div>
+    <div class="mcard"><div class="ml">Entries</div><div class="mv" id="mo-count">0</div></div>
+  </div>
+  <div class="scard"><div class="scard-title">Daily spending trend</div><div class="cw h240"><canvas id="ch-mo-line"></canvas></div></div>
+  <div class="scard"><div class="scard-title">Category breakdown</div><div id="mo-cats"></div></div>
+  <div class="scard"><div class="scard-title">Week-by-week</div><div class="cw h180"><canvas id="ch-mo-week"></canvas></div></div>
+</div>
+
+<!-- ═══ CATEGORY PAGE ═══ -->
+<div class="page" id="page-category">
+  <div class="frow">
+    <select id="cat-period" onchange="rCategory()">
+      <option value="all">All Time</option>
+      <option value="month">This Month</option>
+      <option value="week">This Week</option>
+    </select>
+  </div>
+  <div class="scard"><div class="scard-title">Spending by category</div><div class="cw h260"><canvas id="ch-cat-h"></canvas></div></div>
+  <div class="scard">
+    <div class="scard-title">Category share</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center">
+      <div class="cw" style="height:170px"><canvas id="ch-cat-d"></canvas></div>
+      <div id="cat-d-legend" style="display:flex;flex-direction:column;gap:7px;font-size:11px"></div>
+    </div>
+  </div>
+  <div class="scard"><div class="scard-title">Detail table</div><div id="cat-detail"></div></div>
+</div>
+
+<!-- ═══ INSIGHTS PAGE ═══ -->
+<div class="page" id="page-insights">
+  <div class="scard"><div class="scard-title">30-day spending trend</div><div class="cw h220"><canvas id="ch-trend"></canvas></div></div>
+  <div class="igrid" id="icards"></div>
+  <div class="scard">
+    <div class="scard-title">Activity heatmap — last 30 days</div>
+    <div id="hmgrid"></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:10px;font-size:10px;color:var(--muted)">
+      <span>Less</span>
+      <span style="width:11px;height:11px;background:var(--surface3);border-radius:2px;display:inline-block"></span>
+      <span style="width:11px;height:11px;background:#1a4731;border-radius:2px;display:inline-block"></span>
+      <span style="width:11px;height:11px;background:#22863a;border-radius:2px;display:inline-block"></span>
+      <span style="width:11px;height:11px;background:#2ea043;border-radius:2px;display:inline-block"></span>
+      <span>More</span>
+    </div>
+  </div>
+  <div class="scard"><div class="scard-title">Top 5 spending days</div><div id="top-days"></div></div>
+  <div class="scard">
+    <div class="scard-title">Payment method split</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center">
+      <div class="cw" style="height:160px"><canvas id="ch-pay"></canvas></div>
+      <div id="pay-legend" style="display:flex;flex-direction:column;gap:7px;font-size:11px"></div>
+    </div>
+  </div>
+  <div class="scard"><div class="scard-title">Spending by day of week</div><div class="cw h180"><canvas id="ch-dow"></canvas></div></div>
+</div>
+
+<!-- ═══ LEDGER PAGE ═══ -->
+<div class="page" id="page-sheet">
+  <div class="frow">
+    <input type="text" id="sq" placeholder="🔍  Search entries..." oninput="rSheet()">
+    <select id="sh-cat" onchange="rSheet()"><option value="">All Categories</option></select>
+    <select id="sh-pay" onchange="rSheet()"><option value="">All Payments</option><option>Cash</option><option>UPI</option><option>Card</option><option>Net Banking</option><option>Wallet</option></select>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <span id="sh-summary" style="font-size:11px;color:var(--muted)"></span>
+    <button class="btn-sm green" onclick="exportCSV()">Export CSV ↓</button>
+  </div>
+  <div class="scard" style="padding:10px"><div id="sh-list"></div></div>
+</div>
+
+<!-- ═══ SYNC PAGE ═══ -->
+<div class="page" id="page-sync">
+  <div class="scard">
+    <div class="scard-title">Google Sheets Sync</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+      Connect your Google Sheet to automatically back up every entry. Takes 3 minutes to set up once.
+    </p>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Step 1 — Open your Google Sheet</div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.7">Go to your sheet → <strong style="color:var(--text)">Extensions → Apps Script</strong> → delete existing code → paste the script below → click <strong style="color:var(--text)">Deploy → New deployment → Web app</strong> → set "Who has access" to <strong style="color:var(--text)">Anyone</strong> → Deploy → copy the URL.</p>
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Apps Script Code</span>
+        <button class="btn-sm accent" onclick="copyScript()">Copy Script</button>
+      </div>
+      <pre id="script-code" style="font-size:10px;font-family:var(--fm);color:var(--text);white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:180px;overflow-y:auto;background:var(--bg);padding:10px;border-radius:var(--r);border:1px solid var(--border)"></pre>
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Step 2 — Paste your Web App URL</div>
+      <div class="fg"><input type="url" id="sheet-url" placeholder="https://script.google.com/macros/s/..." style="font-size:12px"></div>
+      <button class="btn-sm accent" style="margin-top:8px" onclick="saveSheetUrl()">Save URL</button>
+    </div>
+
+    <div class="sync-panel">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Sync Controls</div>
+      <div class="sync-row">
+        <div class="sync-status" id="sync-dot"></div>
+        <span id="sync-msg" style="font-size:12px;color:var(--muted);flex:1">Not configured</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-sm green" onclick="syncToSheet()">↑ Push all to Sheet</button>
+        <button class="btn-sm accent" onclick="syncFromSheet()">↓ Pull from Sheet</button>
+        <button class="btn-sm" onclick="exportJSON()">Export JSON backup</button>
+        <button class="btn-sm" onclick="document.getElementById('imp-file').click()">Import JSON</button>
+        <input type="file" id="imp-file" accept=".json" style="display:none" onchange="importJSON(this)">
+      </div>
+    </div>
+
+    <div style="background:var(--redbg);border:1px solid rgba(240,82,82,.3);border-radius:var(--r);padding:12px;margin-top:8px">
+      <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:6px">⚠ Danger Zone</div>
+      <button class="btn-sm" style="color:var(--red);border-color:var(--red)" onclick="clearAllData()">Clear all entries</button>
+    </div>
+  </div>
+
+  <div class="scard">
+    <div class="scard-title">Data summary</div>
+    <div id="data-summary" style="font-size:13px;color:var(--muted);line-height:2"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// CATEGORIES
+// ════════════════════════════════════════════════════════
+const CATS=[
+  {id:'food',      label:'Food',        color:'#f59e0b',emoji:'🍽️'},
+  {id:'petrol',    label:'Petrol',      color:'#ef4444',emoji:'⛽'},
+  {id:'home',      label:'Home',        color:'#3b82f6',emoji:'🏠'},
+  {id:'bike',      label:'Bike',        color:'#8b5cf6',emoji:'🔧'},
+  {id:'clothes',   label:'Clothes',     color:'#ec4899',emoji:'👕'},
+  {id:'mobile',    label:'Mobile',      color:'#06b6d4',emoji:'📱'},
+  {id:'software',  label:'Software',    color:'#10b981',emoji:'💻'},
+  {id:'grocery',   label:'Grocery',     color:'#84cc16',emoji:'🛒'},
+  {id:'health',    label:'Health',      color:'#14b8a6',emoji:'💊'},
+  {id:'transport', label:'Transport',   color:'#f97316',emoji:'🚕'},
+  {id:'fun',       label:'Fun',         color:'#a855f7',emoji:'🎬'},
+  {id:'education', label:'Learn',       color:'#6366f1',emoji:'📚'},
+  {id:'savings',   label:'Savings',     color:'#22c55e',emoji:'💰'},
+  {id:'others',    label:'Others',      color:'#94a3b8',emoji:'📦'},
+];
+const CM={};CATS.forEach(c=>CM[c.id]=c);
+
+// ════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════
+const LS_KEY='paisa_entries_v3';
+const LS_URL='paisa_sheet_url';
+let entries=[];
+let selCat='food';
+let dailyD=new Date();
+let weekOff=0,monthOff=0;
+const charts={};
+
+// ════════════════════════════════════════════════════════
+// STORAGE — localStorage ONLY (no demo reset)
+// ════════════════════════════════════════════════════════
+function load(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(raw){entries=JSON.parse(raw);}
+    else{entries=[];} // empty on first run, no demo data
+  }catch(e){entries=[];}
+  const url=localStorage.getItem(LS_URL)||'';
+  if(url){document.getElementById('sheet-url').value=url;updateSyncStatus('ready','Sheet URL configured');}
+}
+
+function save(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify(entries));}
+  catch(e){toast('⚠ Storage full — export a backup!');}
+}
+
+function saveSheetUrl(){
+  const url=document.getElementById('sheet-url').value.trim();
+  localStorage.setItem(LS_URL,url);
+  updateSyncStatus('ready','Sheet URL saved');
+  toast('✓ Sheet URL saved');
+}
+
+function updateSyncStatus(state,msg){
+  const dot=document.getElementById('sync-dot');
+  const m=document.getElementById('sync-msg');
+  dot.className='sync-status'+(state==='ok'?' ok':state==='err'?' err':state==='pending'?' pending':'');
+  m.textContent=msg;
+}
+
+// ════════════════════════════════════════════════════════
+// GOOGLE SHEET SYNC
+// ════════════════════════════════════════════════════════
+const APPS_SCRIPT=`function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName("Expenses") || ss.insertSheet("Expenses");
+  var data = JSON.parse(e.postData.contents);
+  
+  if (data.action === "clear") {
+    sh.clearContents();
+  }
+  if (data.action === "init" || data.action === "clear") {
+    sh.appendRow(["ID","Date","Description","Category","Amount","Payment","Tag","Notes","Added On"]);
+  }
+  if (data.entries) {
+    data.entries.forEach(function(row) {
+      sh.appendRow([row.id,row.date,row.desc,row.cat,row.amount,row.pay,row.tag||"",row.notes||"",row.ts||""]);
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify({ok:true,rows:data.entries?data.entries.length:0})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName("Expenses");
+  if (!sh) return ContentService.createTextOutput(JSON.stringify({entries:[]})).setMimeType(ContentService.MimeType.JSON);
+  var rows = sh.getDataRange().getValues();
+  var entries = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r[0]) continue;
+    entries.push({id:String(r[0]),date:String(r[1]),desc:String(r[2]),cat:String(r[3]),amount:Number(r[4]),pay:String(r[5]),tag:String(r[6]||""),notes:String(r[7]||"")});
+  }
+  return ContentService.createTextOutput(JSON.stringify({entries:entries})).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+document.getElementById('script-code').textContent=APPS_SCRIPT;
+
+function copyScript(){
+  navigator.clipboard.writeText(APPS_SCRIPT).then(()=>toast('✓ Script copied')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=APPS_SCRIPT;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Script copied');
+  });
+}
+
+async function syncToSheet(){
+  const url=localStorage.getItem(LS_URL);
+  if(!url){toast('⚠ No Sheet URL configured — go to ⚙ Sync');return;}
+  updateSyncStatus('pending','Syncing…');
+  try{
+    await fetch(url,{method:'POST',body:JSON.stringify({action:'clear'}),headers:{'Content-Type':'text/plain'}});
+    const batches=chunkArr(entries,200);
+    for(const batch of batches){
+      await fetch(url,{method:'POST',body:JSON.stringify({action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))}),headers:{'Content-Type':'text/plain'}});
+    }
+    updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
+    toast('✓ Synced '+entries.length+' entries to Google Sheet');
+  }catch(err){updateSyncStatus('err','Sync failed: '+err.message);toast('✗ Sync failed — check URL');}
+}
+
+async function syncFromSheet(){
+  const url=localStorage.getItem(LS_URL);
+  if(!url){toast('⚠ No Sheet URL configured');return;}
+  updateSyncStatus('pending','Pulling from Sheet…');
+  try{
+    const res=await fetch(url);const data=await res.json();
+    if(data.entries&&data.entries.length){
+      entries=data.entries;save();refreshAll();
+      updateSyncStatus('ok',`Pulled ${entries.length} entries`);
+      toast('✓ Pulled '+entries.length+' entries from Sheet');
+    }else{updateSyncStatus('ok','Sheet is empty');toast('Sheet appears empty');}
+  }catch(err){updateSyncStatus('err','Pull failed');toast('✗ Pull failed — check URL');}
+}
+
+function chunkArr(arr,n){const r=[];for(let i=0;i<arr.length;i+=n)r.push(arr.slice(i,i+n));return r;}
+
+// JSON backup
+function exportJSON(){
+  const blob=new Blob([JSON.stringify({version:3,exported:new Date().toISOString(),entries},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='paisa_backup_'+today_()+'.json';a.click();
+  toast('✓ Backup downloaded');
+}
+
+function importJSON(input){
+  const f=input.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const arr=data.entries||data;
+      if(!Array.isArray(arr))throw new Error('Invalid format');
+      entries=arr;save();refreshAll();
+      toast('✓ Imported '+arr.length+' entries');
+    }catch(err){toast('✗ Invalid file: '+err.message);}
+  };
+  r.readAsText(f);input.value='';
+}
+
+function clearAllData(){
+  if(!confirm('Delete ALL entries permanently? This cannot be undone.'))return;
+  entries=[];save();refreshAll();toast('All entries cleared');
+}
+
+// ════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════
+const fmt=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+const fmtD=d=>new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+const dk=d=>new Date(d).toISOString().split('T')[0];
+const today_=()=>dk(new Date());
+const sum=l=>l.reduce((a,e)=>a+e.amount,0);
+const gCat=l=>{const m={};l.forEach(e=>{m[e.cat]=(m[e.cat]||0)+e.amount;});return m;};
+const gDate=l=>{const m={};l.forEach(e=>{m[e.date]=(m[e.date]||0)+e.amount;});return m;};
+const fByStr=(l,s,e)=>l.filter(x=>x.date>=s&&x.date<=e);
+const fBy=(l,s,e)=>fByStr(l,dk(s),dk(e));
+const dc=id=>{if(charts[id]){charts[id].destroy();delete charts[id];}};
+
+const CHART_OPTS={
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{grid:{display:false},ticks:{color:'#7a798e',font:{size:10,family:'DM Mono'}}},
+    y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#7a798e',font:{size:10,family:'DM Mono'},callback:v=>'₹'+v.toLocaleString('en-IN')}}
+  }
+};
+
+// ════════════════════════════════════════════════════════
+// CATEGORY GRID
+// ════════════════════════════════════════════════════════
+function buildCatGrid(){
+  document.getElementById('catgrid').innerHTML=CATS.map(c=>`
+    <button class="catbtn ${c.id===selCat?'active':''}" onclick="selCat='${c.id}';buildCatGrid()">
+      <span class="ci">${c.emoji}</span><span>${c.label}</span>
+    </button>`).join('');
+  const fc=document.getElementById('sh-cat');
+  fc.innerHTML='<option value="">All Categories</option>'+CATS.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// ADD ENTRY
+// ════════════════════════════════════════════════════════
+function addEntry(){
+  const amt=parseFloat(document.getElementById('f-amt').value);
+  const date=document.getElementById('f-date').value;
+  if(!amt||amt<=0){toast('⚠ Enter a valid amount');return;}
+  if(!date){toast('⚠ Select a date');return;}
+  const e={
+    id:Date.now()+Math.random().toString(36).slice(2),
+    date,amount:amt,cat:selCat,
+    desc:(document.getElementById('f-desc').value.trim()||CM[selCat]?.label||selCat),
+    pay:document.getElementById('f-pay').value,
+    tag:document.getElementById('f-tag').value.trim(),
+    notes:document.getElementById('f-notes').value.trim()
+  };
+  entries.unshift(e);
+  save();
+  // Auto-sync if URL configured
+  const url=localStorage.getItem(LS_URL);
+  if(url)autoSync(e);
+  refreshAll();
+  document.getElementById('f-amt').value='';
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-tag').value='';
+  document.getElementById('f-notes').value='';
+  toast('✓ '+fmt(amt)+' added');
+}
+
+async function autoSync(entry){
+  const url=localStorage.getItem(LS_URL);if(!url)return;
+  try{
+    await fetch(url,{method:'POST',body:JSON.stringify({action:'append',entries:[{...entry,ts:new Date().toISOString()}]}),headers:{'Content-Type':'text/plain'}});
+  }catch(e){/* silent fail */}
+}
+
+function deleteEntry(id){
+  entries=entries.filter(e=>e.id!==id);
+  save();refreshAll();toast('Entry deleted');
+}
+
+// ════════════════════════════════════════════════════════
+// ENTRY ROW HTML
+// ════════════════════════════════════════════════════════
+function eRow(e,del=true){
+  const c=CM[e.cat]||{color:'#94a3b8',emoji:'📦',label:e.cat};
+  return`<div class="erow">
+    <div class="eicon" style="background:${c.color}20">${c.emoji}</div>
+    <div class="einfo">
+      <div class="edesc">${e.desc||c.label}</div>
+      <div class="emeta">${c.label} · ${e.pay}${e.tag?' · #'+e.tag:''} · ${fmtD(e.date)}</div>
+    </div>
+    <div class="eamt">${fmt(e.amount)}</div>
+    ${del?`<button class="edel" onclick="deleteEntry('${e.id}')">✕</button>`:''}
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════
+// REFRESH ALL
+// ════════════════════════════════════════════════════════
+function refreshAll(){
+  updateMetrics();rAddPage();
+  const ap=document.querySelector('.page.active')?.id?.replace('page-','');
+  if(ap==='daily')rDaily();
+  else if(ap==='weekly')rWeekly();
+  else if(ap==='monthly')rMonthly();
+  else if(ap==='category')rCategory();
+  else if(ap==='insights')rInsights();
+  else if(ap==='sheet')rSheet();
+  else if(ap==='sync')rSync();
+}
+
+function updateMetrics(){
+  const n=new Date();
+  const tl=entries.filter(e=>e.date===today_());
+  const ws=new Date(n);ws.setDate(n.getDate()-n.getDay());
+  const wl=fBy(entries,ws,n);
+  const ms=new Date(n.getFullYear(),n.getMonth(),1);
+  const ml=fBy(entries,ms,n);
+  [[tl,'today'],[wl,'week'],[ml,'month'],[entries,'total']].forEach(([l,k])=>{
+    document.getElementById('m-'+k).textContent=fmt(sum(l));
+    document.getElementById('ms-'+k).textContent=l.length+' entr'+(l.length===1?'y':'ies');
+  });
+}
+
+function rAddPage(){
+  const tl=entries.filter(e=>e.date===today_());
+  document.getElementById('today-tot').textContent=tl.length?fmt(sum(tl)):'';
+  document.getElementById('today-list').innerHTML=tl.length?tl.map(e=>eRow(e)).join(''):'<div class="empty"><div class="ei">📋</div>No entries today yet</div>';
+}
+
+// ════════════════════════════════════════════════════════
+// DAILY
+// ════════════════════════════════════════════════════════
+function chDay(d){dailyD=new Date(dailyD.getTime()+d*86400000);rDaily();}
+function rDaily(){
+  const ds=dk(dailyD);
+  document.getElementById('d-label').textContent=dailyD.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+  const l=entries.filter(e=>e.date===ds),tot=sum(l);
+  document.getElementById('d-total').textContent=fmt(tot);
+  document.getElementById('d-count').textContent=l.length;
+  document.getElementById('d-avg').textContent=l.length?fmt(tot/l.length):'₹0';
+  const cg=gCat(l),top=Object.entries(cg).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('d-top').textContent=top?(CM[top[0]]?.emoji||'')+' '+(CM[top[0]]?.label||top[0]):'—';
+  dc('d-bar');
+  const cats=Object.entries(cg).sort((a,b)=>b[1]-a[1]);
+  if(cats.length){
+    charts['d-bar']=new Chart(document.getElementById('ch-d-bar'),{
+      type:'bar',data:{labels:cats.map(c=>CM[c[0]]?.label||c[0]),datasets:[{data:cats.map(c=>Math.round(c[1])),backgroundColor:cats.map(c=>CM[c[0]]?.color+'cc'||'#94a3b8'),borderRadius:6,borderSkipped:false}]},
+      options:{...CHART_OPTS}
+    });
+  }
+  document.getElementById('d-list').innerHTML=l.length?l.map(e=>eRow(e)).join(''):'<div class="empty"><div class="ei">😌</div>No spending this day</div>';
+}
+
+// ════════════════════════════════════════════════════════
+// WEEKLY
+// ════════════════════════════════════════════════════════
+function chWeek(d){weekOff+=d;rWeekly();}
+function rWeekly(){
+  const n=new Date();const ref=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  ref.setDate(ref.getDate()-ref.getDay()+weekOff*7);
+  const end=new Date(ref);end.setDate(end.getDate()+6);
+  const ss=dk(ref),es=dk(end);
+  document.getElementById('w-label').textContent=fmtD(ref)+' – '+fmtD(end);
+  const l=fByStr(entries,ss,es),tot=sum(l);
+  document.getElementById('w-total').textContent=fmt(tot);
+  document.getElementById('w-avg').textContent=fmt(tot/7);
+  document.getElementById('w-count').textContent=l.length;
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dt=days.map((_,i)=>{const d=new Date(ref);d.setDate(d.getDate()+i);return sum(entries.filter(e=>e.date===dk(d)));});
+  const mx=Math.max(...dt),pi=dt.indexOf(mx);
+  document.getElementById('w-peak').textContent=mx>0?days[pi]:'—';
+  dc('w-bar');
+  charts['w-bar']=new Chart(document.getElementById('ch-w-bar'),{
+    type:'bar',
+    data:{
+      labels:days.map((d,i)=>{const dt2=new Date(ref);dt2.setDate(dt2.getDate()+i);return d+' '+dt2.getDate();}),
+      datasets:[{data:dt.map(v=>Math.round(v)),backgroundColor:dt.map((v,i)=>i===pi&&v>0?'#ef4444cc':'#7c6af7cc'),borderRadius:6,borderSkipped:false}]
+    },
+    options:{...CHART_OPTS}
+  });
+  const cg=gCat(l),cats=Object.entries(cg).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('w-cats').innerHTML=cats.map(c=>{
+    const cat=CM[c[0]];const pct=tot>0?Math.round(c[1]/tot*100):0;
+    return`<div class="csl-item">
+      <span style="font-size:17px">${cat?.emoji||'📦'}</span>
+      <span style="flex:1;font-size:12px;color:var(--text)">${cat?.label||c[0]}</span>
+      <div style="width:70px"><div class="pb"><div class="pbf" style="width:${pct}%;background:${cat?.color||'#94a3b8'}"></div></div></div>
+      <span style="font-size:12px;font-family:var(--fm);min-width:56px;text-align:right">${fmt(c[1])}</span>
+    </div>`;
+  }).join('')||'<div class="empty" style="padding:16px">No entries</div>';
+  let html='';
+  for(let i=0;i<7;i++){
+    const d=new Date(ref);d.setDate(d.getDate()+i);const ds2=dk(d);
+    const dl=entries.filter(e=>e.date===ds2);if(!dl.length)continue;
+    html+=`<div style="margin-bottom:12px"><div class="divlabel">${d.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})}<span>${fmt(sum(dl))}</span></div>${dl.map(e=>eRow(e,false)).join('')}</div>`;
+  }
+  document.getElementById('w-entries').innerHTML=html||'<div class="empty"><div class="ei">🗓️</div>No entries this week</div>';
+}
+
+// ════════════════════════════════════════════════════════
+// MONTHLY
+// ════════════════════════════════════════════════════════
+function chMonth(d){monthOff+=d;rMonthly();}
+function rMonthly(){
+  const n=new Date();
+  const ref=new Date(n.getFullYear(),n.getMonth()+monthOff,1);
+  const end=new Date(ref.getFullYear(),ref.getMonth()+1,0);
+  const ss=dk(ref),es=dk(end);
+  document.getElementById('mo-label').textContent=ref.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const l=fByStr(entries,ss,es),tot=sum(l),days=end.getDate();
+  document.getElementById('mo-total').textContent=fmt(tot);
+  document.getElementById('mo-avg').textContent=fmt(tot/days);
+  document.getElementById('mo-count').textContent=l.length;
+  const bd=gDate(l),pk=Object.entries(bd).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('mo-peak').textContent=pk?fmtD(pk[0])+'\n'+fmt(pk[1]):'—';
+  const labels=[],data=[];
+  for(let d=1;d<=days;d++){
+    const ds=`${ref.getFullYear()}-${String(ref.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    labels.push(d);data.push(Math.round(bd[ds]||0));
+  }
+  dc('mo-line');
+  charts['mo-line']=new Chart(document.getElementById('ch-mo-line'),{
+    type:'line',
+    data:{labels,datasets:[{data,borderColor:'#7c6af7',backgroundColor:'rgba(124,106,247,.15)',fill:true,tension:.35,borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#7c6af7'}]},
+    options:{...CHART_OPTS,scales:{...CHART_OPTS.scales,x:{...CHART_OPTS.scales.x,ticks:{...CHART_OPTS.scales.x.ticks,callback:(v,i)=>i%5===0?labels[i]:''}}}}
+  });
+  const cg=gCat(l),cats=Object.entries(cg).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('mo-cats').innerHTML=`<table class="bt"><thead><tr><th>Category</th><th>Amount</th><th>Share</th><th>Count</th></tr></thead><tbody>`+
+    cats.map(c=>{const cat=CM[c[0]];const pct=tot?Math.round(c[1]/tot*100):0;const cnt=l.filter(e=>e.cat===c[0]).length;
+      return`<tr><td><span style="color:${cat?.color}">${cat?.emoji||''}</span> ${cat?.label||c[0]}</td><td class="num">${fmt(c[1])}</td><td class="num">${pct}%</td><td class="num">${cnt}</td></tr>`;
+    }).join('')+'</tbody></table>';
+  const wData=[0,0,0,0,0];
+  l.forEach(e=>{const d=new Date(e.date).getDate();wData[Math.min(Math.floor((d-1)/7),4)]+=e.amount;});
+  dc('mo-week');
+  charts['mo-week']=new Chart(document.getElementById('ch-mo-week'),{
+    type:'bar',
+    data:{labels:['Wk 1','Wk 2','Wk 3','Wk 4','Wk 5'],datasets:[{data:wData.map(v=>Math.round(v)),backgroundColor:'rgba(124,106,247,.7)',borderRadius:6,borderSkipped:false}]},
+    options:{...CHART_OPTS}
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// CATEGORY
+// ════════════════════════════════════════════════════════
+function rCategory(){
+  const period=document.getElementById('cat-period').value;
+  const n=new Date();
+  let l=entries;
+  if(period==='month')l=fBy(entries,new Date(n.getFullYear(),n.getMonth(),1),n);
+  if(period==='week'){const s=new Date(n);s.setDate(s.getDate()-s.getDay());l=fBy(entries,s,n);}
+  const tot=sum(l),cg=gCat(l),cats=Object.entries(cg).sort((a,b)=>b[1]-a[1]);
+  const hh=Math.max(cats.length*42+60,150);
+  document.getElementById('ch-cat-h').parentElement.style.height=hh+'px';
+  dc('cat-h');
+  charts['cat-h']=new Chart(document.getElementById('ch-cat-h'),{
+    type:'bar',
+    data:{labels:cats.map(c=>CM[c[0]]?.label||c[0]),datasets:[{data:cats.map(c=>Math.round(c[1])),backgroundColor:cats.map(c=>CM[c[0]]?.color+'cc'||'#94a3b8'),borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#7a798e',font:{size:10,family:'DM Mono'},callback:v=>'₹'+v.toLocaleString('en-IN')}},y:{grid:{display:false},ticks:{color:'#7a798e',font:{size:10,family:'DM Mono'}}}}}
+  });
+  dc('cat-d');
+  if(cats.length){
+    charts['cat-d']=new Chart(document.getElementById('ch-cat-d'),{
+      type:'doughnut',
+      data:{labels:cats.map(c=>CM[c[0]]?.label||c[0]),datasets:[{data:cats.map(c=>Math.round(c[1])),backgroundColor:cats.map(c=>CM[c[0]]?.color+'dd'||'#94a3b8'),borderWidth:0,hoverOffset:6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'60%'}
+    });
+  }
+  document.getElementById('cat-d-legend').innerHTML=cats.slice(0,7).map(c=>{
+    const cat=CM[c[0]];const pct=tot?Math.round(c[1]/tot*100):0;
+    return`<div style="display:flex;align-items:center;gap:6px">
+      <span style="width:9px;height:9px;border-radius:2px;background:${cat?.color};flex-shrink:0"></span>
+      <span style="flex:1;color:var(--muted)">${cat?.label||c[0]}</span>
+      <span style="font-family:var(--fm);font-size:10px">${pct}%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('cat-detail').innerHTML=`<table class="bt"><thead><tr><th>Category</th><th>Total</th><th>Entries</th><th>Avg</th><th>Share</th></tr></thead><tbody>`+
+    cats.map(c=>{const cat=CM[c[0]];const cnt=l.filter(e=>e.cat===c[0]).length;const pct=tot?Math.round(c[1]/tot*100):0;
+      return`<tr><td><span style="color:${cat?.color}">${cat?.emoji||''}</span> ${cat?.label||c[0]}</td>
+        <td class="num">${fmt(c[1])}</td><td class="num">${cnt}</td><td class="num">${fmt(c[1]/Math.max(cnt,1))}</td>
+        <td class="num">${pct}%<div class="pb"><div class="pbf" style="width:${pct}%;background:${cat?.color||'#94a3b8'}"></div></div></td></tr>`;
+    }).join('')+'</tbody></table>';
+}
+
+// ════════════════════════════════════════════════════════
+// INSIGHTS
+// ════════════════════════════════════════════════════════
+function rInsights(){
+  const n=new Date();
+  const l30=[],d30=[];
+  for(let i=29;i>=0;i--){const d=new Date(n);d.setDate(d.getDate()-i);const ds=dk(d);l30.push(i===0?'Today':d.toLocaleDateString('en-IN',{month:'short',day:'numeric'}));d30.push(Math.round(sum(entries.filter(e=>e.date===ds))));}
+  dc('trend');
+  charts['trend']=new Chart(document.getElementById('ch-trend'),{
+    type:'line',
+    data:{labels:l30,datasets:[{data:d30,borderColor:'#22d37a',backgroundColor:'rgba(34,211,122,.08)',fill:true,tension:.4,borderWidth:2,pointRadius:0,pointHoverRadius:5}]},
+    options:{...CHART_OPTS,scales:{...CHART_OPTS.scales,x:{...CHART_OPTS.scales.x,ticks:{...CHART_OPTS.scales.x.ticks,maxTicksLimit:8}}}}
+  });
+  const ms=new Date(n.getFullYear(),n.getMonth(),1);
+  const lms=new Date(n.getFullYear(),n.getMonth()-1,1),lme=new Date(n.getFullYear(),n.getMonth(),0);
+  const tm=sum(fBy(entries,ms,n)),lm=sum(fBy(entries,lms,lme));
+  const chg=lm>0?Math.round((tm-lm)/lm*100):0;
+  const cg=gCat(entries),topC=Object.entries(cg).sort((a,b)=>b[1]-a[1])[0];
+  const topD=Object.entries(gDate(entries)).sort((a,b)=>b[1]-a[1])[0];
+  const dw=[0,0,0,0,0,0,0];entries.forEach(e=>{dw[new Date(e.date).getDay()]+=e.amount;});
+  const dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  document.getElementById('icards').innerHTML=[
+    {t:'vs Last Month',v:`${chg>=0?'▲':'▼'} ${Math.abs(chg)}%`,s:chg>=0?'Spending increased':'Spending decreased',c:chg>=0?'#f05252':'#22d37a'},
+    {t:'Top Category',v:topC?(CM[topC[0]]?.emoji||'')+' '+(CM[topC[0]]?.label||topC[0]):'—',s:topC?fmt(topC[1])+' total':'No data',c:'#f5a623'},
+    {t:'Biggest Day',v:topD?fmtD(topD[0]):'—',s:topD?fmt(topD[1]):'',c:'#7c6af7'},
+    {t:'Heaviest Weekday',v:dayNames[dw.indexOf(Math.max(...dw))],s:'Most spending on this day',c:'#06b6d4'},
+  ].map(i=>`<div class="icard"><div class="ititle">${i.t}</div><strong style="color:${i.c}">${i.v}</strong><div class="isub">${i.s}</div></div>`).join('');
+  const hg=document.getElementById('hmgrid');hg.innerHTML='';
+  const mx=Math.max(...d30,1);
+  d30.forEach((v,i)=>{
+    const d=new Date(n);d.setDate(d.getDate()-(29-i));
+    const r=v/mx;const bg=r===0?'var(--surface3)':r<.33?'#1a4731':r<.66?'#22863a':'#2ea043';
+    hg.innerHTML+=`<div class="hc" title="${d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}: ${fmt(v)}" style="background:${bg}"></div>`;
+  });
+  const td=Object.entries(gDate(entries)).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('top-days').innerHTML=td.map((t,i)=>`
+    <div class="erow">
+      <span style="font-size:11px;font-weight:600;color:var(--muted);min-width:18px;font-family:var(--fm)">${i+1}</span>
+      <div style="flex:1;font-size:13px;font-weight:500">${fmtD(t[0])}</div>
+      <div style="font-size:14px;font-weight:600;font-family:var(--fm)">${fmt(t[1])}</div>
+    </div>`).join('')||'<div class="empty">No data yet</div>';
+  const pg={};entries.forEach(e=>{pg[e.pay]=(pg[e.pay]||0)+e.amount;});
+  const pe=Object.entries(pg).sort((a,b)=>b[1]-a[1]);
+  const pc=['#7c6af7','#f5a623','#22d37a','#06b6d4','#ec4899'];
+  dc('pay');
+  if(pe.length){
+    charts['pay']=new Chart(document.getElementById('ch-pay'),{
+      type:'doughnut',
+      data:{labels:pe.map(p=>p[0]),datasets:[{data:pe.map(p=>Math.round(p[1])),backgroundColor:pc.slice(0,pe.length),borderWidth:0,hoverOffset:6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}
+    });
+    const pt=sum(entries);
+    document.getElementById('pay-legend').innerHTML=pe.map((p,i)=>`
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:9px;height:9px;border-radius:2px;background:${pc[i]};flex-shrink:0"></span>
+        <span style="flex:1;color:var(--muted)">${p[0]}</span>
+        <span style="font-family:var(--fm);font-size:10px">${pt?Math.round(p[1]/pt*100):0}%</span>
+      </div>`).join('');
+  }
+  // Day of week chart
+  dc('dow');
+  charts['dow']=new Chart(document.getElementById('ch-dow'),{
+    type:'bar',
+    data:{labels:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],datasets:[{data:dw.map(v=>Math.round(v)),backgroundColor:dw.map((v,i)=>v===Math.max(...dw)?'#f5a623cc':'#7c6af766'),borderRadius:6,borderSkipped:false}]},
+    options:{...CHART_OPTS}
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// LEDGER / SHEET
+// ════════════════════════════════════════════════════════
+function rSheet(){
+  const q=document.getElementById('sq').value.toLowerCase();
+  const fc=document.getElementById('sh-cat').value;
+  const fp=document.getElementById('sh-pay').value;
+  let l=entries.filter(e=>{
+    if(fc&&e.cat!==fc)return false;
+    if(fp&&e.pay!==fp)return false;
+    if(q&&!(e.desc.toLowerCase().includes(q)||(CM[e.cat]?.label||'').toLowerCase().includes(q)||(e.tag||'').toLowerCase().includes(q)))return false;
+    return true;
+  });
+  document.getElementById('sh-summary').textContent=`${l.length} entries · ${fmt(sum(l))}`;
+  document.getElementById('sh-list').innerHTML=l.length?l.map(e=>eRow(e)).join(''):'<div class="empty"><div class="ei">🔍</div>No entries found</div>';
+}
+
+function exportCSV(){
+  const rows=[['Date','Description','Category','Amount','Payment','Tag','Notes'],...entries.map(e=>[e.date,e.desc,CM[e.cat]?.label||e.cat,e.amount,e.pay,e.tag||'',e.notes||''])];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='paisa_'+today_()+'.csv';a.click();
+  toast('✓ CSV exported');
+}
+
+// ════════════════════════════════════════════════════════
+// SYNC PAGE
+// ════════════════════════════════════════════════════════
+function rSync(){
+  const url=localStorage.getItem(LS_URL)||'';
+  document.getElementById('sheet-url').value=url;
+  if(url)updateSyncStatus('ok','Sheet URL configured');
+  document.getElementById('data-summary').innerHTML=`
+    Total entries: <strong style="color:var(--text)">${entries.length}</strong><br>
+    Total spent: <strong style="color:var(--text)">${fmt(sum(entries))}</strong><br>
+    Date range: <strong style="color:var(--text)">${entries.length?fmtD(entries[entries.length-1].date)+' – '+fmtD(entries[0].date):'—'}</strong><br>
+    localStorage size: <strong style="color:var(--text)">${(JSON.stringify(entries).length/1024).toFixed(1)} KB</strong>
+  `;
+}
+
+// ════════════════════════════════════════════════════════
+// NAV
+// ════════════════════════════════════════════════════════
+function goPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='daily')rDaily();
+  else if(id==='weekly')rWeekly();
+  else if(id==='monthly')rMonthly();
+  else if(id==='category')rCategory();
+  else if(id==='insights')rInsights();
+  else if(id==='sheet')rSheet();
+  else if(id==='sync')rSync();
+  window.scrollTo(0,0);
+}
+
+// ════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+load();
+buildCatGrid();
+document.getElementById('f-date').value=today_();
+refreshAll();
+</script>
+</body>
+</html>
