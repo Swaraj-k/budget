@@ -279,6 +279,12 @@ body{font-family:var(--ff);background:var(--bg);color:var(--text);font-size:14px
       <button class="nb" onclick="goPage('sync',this)">⚙ Sync</button>
       <button class="nb" onclick="lockApp()" style="color:#f05252;margin-left:4px">🔒 Lock</button>
     </div>
+    <div id="topbar-sync" style="font-size:10px;color:#7a798e;padding:3px 0 5px;display:flex;align-items:center;gap:6px">
+      <span id="tb-sync-dot" style="width:6px;height:6px;border-radius:50%;background:#3a3a46;flex-shrink:0;display:inline-block"></span>
+      <span id="tb-sync-msg">Not synced</span>
+      <button onclick="syncFromSheet(false)" style="background:none;border:none;color:#7c6af7;font-size:10px;cursor:pointer;font-family:inherit;padding:0;margin-left:4px">↻ Sync now</button>
+    </div>
+    </div>
   </div>
 </div>
 
@@ -564,8 +570,16 @@ function saveSheetUrl(){
 function updateSyncStatus(state,msg){
   const dot=document.getElementById('sync-dot');
   const m=document.getElementById('sync-msg');
-  dot.className='sync-status'+(state==='ok'?' ok':state==='err'?' err':state==='pending'?' pending':'');
-  m.textContent=msg;
+  if(dot) { dot.className='sync-status'+(state==='ok'?' ok':state==='err'?' err':state==='pending'?' pending':''); }
+  if(m) m.textContent=msg;
+  // Update topbar indicator
+  const tbDot=document.getElementById('tb-sync-dot');
+  const tbMsg=document.getElementById('tb-sync-msg');
+  if(tbDot){
+    tbDot.style.background = state==='ok'?'#22d37a':state==='err'?'#f05252':state==='pending'?'#f5a623':'#3a3a46';
+    if(state==='pending'){ tbDot.style.animation='pulse 1s infinite'; } else { tbDot.style.animation='none'; }
+  }
+  if(tbMsg) tbMsg.textContent = msg;
 }
 
 // ════════════════════════════════════════════════════════
@@ -626,14 +640,17 @@ async function sheetPost(url, data){
 }
 
 async function syncToSheet(silent=false){
-  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
-  if(!url){ if(!silent) toast('⚠ No Sheet URL configured — go to ⚙ Sync'); return; }
+  const url = (typeof getUrlSecure==='function' ? getUrlSecure() : null) || localStorage.getItem(LS_URL);
+  if(!url){ if(!silent) toast('⚠ No Sheet URL — configure in ⚙ Sync'); return; }
   if(!silent) updateSyncStatus('pending','Syncing…');
   try{
     await sheetPost(url,{action:'clear'});
+    // Small delay to let clear complete before appending
+    await new Promise(r=>setTimeout(r,800));
     const batches=chunkArr(entries,200);
     for(const batch of batches){
       await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
+      if(batches.length>1) await new Promise(r=>setTimeout(r,500));
     }
     if(!silent){
       updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
@@ -641,7 +658,10 @@ async function syncToSheet(silent=false){
     } else {
       updateSyncStatus('ok',`Last sync: ${new Date().toLocaleTimeString()}`);
     }
-  }catch(err){ if(!silent){ updateSyncStatus('err','Sync failed: '+err.message); toast('✗ Sync failed — check URL'); } }
+  }catch(err){
+    console.error('syncToSheet error:', err);
+    if(!silent){ updateSyncStatus('err','Sync failed: '+err.message); toast('✗ Sync failed — check console'); }
+  }
 }
 
 // ── SMART MERGE: combine sheet entries + local entries by ID ─────────────────
@@ -661,20 +681,28 @@ function mergeEntries(sheetEntries, localEntries){
 }
 
 async function syncFromSheet(silent=false){
-  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
-  if(!url){ if(!silent) toast('⚠ No Sheet URL configured'); return; }
+  const url = (typeof getUrlSecure==='function' ? getUrlSecure() : null) || localStorage.getItem(LS_URL);
+  if(!url){ if(!silent) toast('⚠ No Sheet URL — configure in ⚙ Sync'); return; }
   if(!silent) updateSyncStatus('pending','Pulling from Sheet…');
   try{
-    const res=await fetch(url,{method:'GET',mode:'cors'});
-    const data=await res.json();
-    if(data.entries && data.entries.length){
+    // GET with no-cors fallback: try cors first, fall back to no-cors
+    let data;
+    try{
+      const res = await fetch(url, {method:'GET'});
+      data = await res.json();
+    } catch(e){
+      // On some mobile browsers fetch with cors fails — try with no explicit mode
+      const res = await fetch(url);
+      data = await res.json();
+    }
+    if(data && data.entries && data.entries.length){
       const before = entries.length;
       const merged = mergeEntries(data.entries, entries);
       const newOnes = merged.length - before;
       entries = merged;
       save();
       refreshAll();
-      // Push any local-only entries back to sheet so it has everything
+      // Push any local-only entries to sheet
       const localOnly = entries.filter(e => !data.entries.find(s => s.id===e.id));
       if(localOnly.length){
         for(const batch of chunkArr(localOnly,200)){
@@ -683,21 +711,21 @@ async function syncFromSheet(silent=false){
       }
       if(!silent){
         updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
-        toast(newOnes>0?`✓ ${newOnes} new entries pulled`:'✓ Already up to date');
+        toast(newOnes>0 ? `✓ ${newOnes} new entries pulled` : '✓ Already up to date');
       } else {
         updateSyncStatus('ok',`Last sync: ${new Date().toLocaleTimeString()}`);
         if(newOnes>0) toast(`↓ ${newOnes} new entries from another device`);
       }
     } else {
-      // Sheet is empty — push everything local up
       if(entries.length && !silent){
-        await syncToSheet();
+        await syncToSheet(false);
       } else {
         if(!silent){ updateSyncStatus('ok','Sheet is empty'); toast('Sheet appears empty'); }
       }
     }
-  }catch(err){
-    if(!silent){ updateSyncStatus('err','Sync failed'); toast('✗ Pull failed — check URL'); }
+  } catch(err){
+    console.error('syncFromSheet error:', err);
+    if(!silent){ updateSyncStatus('err','Sync failed: '+err.message); toast('✗ Pull failed — check console for error'); }
   }
 }
 
@@ -795,9 +823,9 @@ function addEntry(){
 }
 
 async function autoSync(entry){
-  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
+  const url=(typeof getUrlSecure==='function'?getUrlSecure():null)||localStorage.getItem(LS_URL);
   if(!url)return;
-  try{await sheetPost(url,{action:'append',entries:[{...entry,ts:new Date().toISOString()}]});}catch(e){}
+  try{await sheetPost(url,{action:'append',entries:[{...entry,ts:new Date().toISOString()}]});}catch(e){console.warn('autoSync failed:',e);}
 }
 
 function deleteEntry(id){
@@ -1396,20 +1424,7 @@ saveSheetUrl = function(){
   toast('✓ Sheet URL saved & secured');
 };
 
-// patch all getters of LS_URL to use secure version
-const _origSyncTo = syncToSheet;
-const _origSyncFrom = syncFromSheet;
-const _origAutoSync = autoSync;
-const _origRSync = rSync;
-
-syncToSheet = async function(silent=false){
-  return syncToSheet(silent);
-};
-
-syncFromSheet = async function(silent=false){
-  return syncFromSheet(silent);
-};
-
+// autoSync uses getUrlSecure directly (no override needed)
 autoSync = async function(entry){
   const url=getUrlSecure();if(!url)return;
   try{await sheetPost(url,{action:'append',entries:[{...entry,ts:new Date().toISOString()}]});}catch(e){}
