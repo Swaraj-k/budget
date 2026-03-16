@@ -625,34 +625,80 @@ async function sheetPost(url, data){
   });
 }
 
-async function syncToSheet(){
+async function syncToSheet(silent=false){
   const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
-  if(!url){toast('⚠ No Sheet URL configured — go to ⚙ Sync');return;}
-  updateSyncStatus('pending','Syncing…');
+  if(!url){ if(!silent) toast('⚠ No Sheet URL configured — go to ⚙ Sync'); return; }
+  if(!silent) updateSyncStatus('pending','Syncing…');
   try{
     await sheetPost(url,{action:'clear'});
     const batches=chunkArr(entries,200);
     for(const batch of batches){
       await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
     }
-    updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
-    toast('✓ Synced '+entries.length+' entries to Google Sheet');
-  }catch(err){updateSyncStatus('err','Sync failed: '+err.message);toast('✗ Sync failed — check URL');}
+    if(!silent){
+      updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
+      toast('✓ Synced '+entries.length+' entries to Google Sheet');
+    } else {
+      updateSyncStatus('ok',`Last sync: ${new Date().toLocaleTimeString()}`);
+    }
+  }catch(err){ if(!silent){ updateSyncStatus('err','Sync failed: '+err.message); toast('✗ Sync failed — check URL'); } }
 }
 
-async function syncFromSheet(){
+// ── SMART MERGE: combine sheet entries + local entries by ID ─────────────────
+// Whichever device added an entry, it ends up on both after a merge.
+// Local-only entries (not yet pushed) are preserved too.
+function mergeEntries(sheetEntries, localEntries){
+  const merged = {};
+  // Sheet entries first (they are the master record)
+  sheetEntries.forEach(e => { merged[e.id] = e; });
+  // Local entries fill in anything the sheet doesn't have yet
+  localEntries.forEach(e => { if(!merged[e.id]) merged[e.id] = e; });
+  // Sort newest first by date then id
+  return Object.values(merged).sort((a,b)=>{
+    if(b.date !== a.date) return b.date.localeCompare(a.date);
+    return b.id.localeCompare(a.id);
+  });
+}
+
+async function syncFromSheet(silent=false){
   const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
-  if(!url){toast('⚠ No Sheet URL configured');return;}
-  updateSyncStatus('pending','Pulling from Sheet…');
+  if(!url){ if(!silent) toast('⚠ No Sheet URL configured'); return; }
+  if(!silent) updateSyncStatus('pending','Pulling from Sheet…');
   try{
-    const res=await fetch(url+'?action=read',{method:'GET',mode:'cors'});
+    const res=await fetch(url,{method:'GET',mode:'cors'});
     const data=await res.json();
-    if(data.entries&&data.entries.length){
-      entries=data.entries;save();refreshAll();
-      updateSyncStatus('ok',`Pulled ${entries.length} entries`);
-      toast('✓ Pulled '+entries.length+' entries from Sheet');
-    }else{updateSyncStatus('ok','Sheet is empty');toast('Sheet appears empty');}
-  }catch(err){updateSyncStatus('err','Pull failed');toast('✗ Pull failed — check URL');}
+    if(data.entries && data.entries.length){
+      const before = entries.length;
+      const merged = mergeEntries(data.entries, entries);
+      const newOnes = merged.length - before;
+      entries = merged;
+      save();
+      refreshAll();
+      // Push any local-only entries back to sheet so it has everything
+      const localOnly = entries.filter(e => !data.entries.find(s => s.id===e.id));
+      if(localOnly.length){
+        for(const batch of chunkArr(localOnly,200)){
+          await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
+        }
+      }
+      if(!silent){
+        updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
+        toast(newOnes>0?`✓ ${newOnes} new entries pulled`:'✓ Already up to date');
+      } else {
+        updateSyncStatus('ok',`Last sync: ${new Date().toLocaleTimeString()}`);
+        if(newOnes>0) toast(`↓ ${newOnes} new entries from another device`);
+      }
+    } else {
+      // Sheet is empty — push everything local up
+      if(entries.length && !silent){
+        await syncToSheet();
+      } else {
+        if(!silent){ updateSyncStatus('ok','Sheet is empty'); toast('Sheet appears empty'); }
+      }
+    }
+  }catch(err){
+    if(!silent){ updateSyncStatus('err','Sync failed'); toast('✗ Pull failed — check URL'); }
+  }
 }
 
 function chunkArr(arr,n){const r=[];for(let i=0;i<arr.length;i+=n)r.push(arr.slice(i,i+n));return r;}
@@ -757,8 +803,10 @@ async function autoSync(entry){
 function deleteEntry(id){
   entries=entries.filter(e=>e.id!==id);
   save();refreshAll();toast('Entry deleted');
+  // Push updated list to sheet so deletion syncs across devices
+  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
+  if(url) syncToSheet(true);
 }
-
 // ════════════════════════════════════════════════════════
 // ENTRY ROW HTML
 // ════════════════════════════════════════════════════════
@@ -1354,34 +1402,12 @@ const _origSyncFrom = syncFromSheet;
 const _origAutoSync = autoSync;
 const _origRSync = rSync;
 
-syncToSheet = async function(){
-  const url=getUrlSecure();
-  if(!url){toast('⚠ No Sheet URL configured — go to ⚙ Sync');return;}
-  updateSyncStatus('pending','Syncing…');
-  try{
-    await sheetPost(url,{action:'clear'});
-    const batches=chunkArr(entries,200);
-    for(const batch of batches){
-      await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
-    }
-    updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
-    toast('✓ Synced '+entries.length+' entries to Google Sheet');
-  }catch(err){updateSyncStatus('err','Sync failed: '+err.message);toast('✗ Sync failed — check URL');}
+syncToSheet = async function(silent=false){
+  return syncToSheet(silent);
 };
 
-syncFromSheet = async function(){
-  const url=getUrlSecure();
-  if(!url){toast('⚠ No Sheet URL configured');return;}
-  updateSyncStatus('pending','Pulling from Sheet…');
-  try{
-    const res=await fetch(url+'?action=read',{method:'GET',mode:'cors'});
-    const data=await res.json();
-    if(data.entries&&data.entries.length){
-      entries=data.entries;save();refreshAll();
-      updateSyncStatus('ok',`Pulled ${entries.length} entries`);
-      toast('✓ Pulled '+entries.length+' entries from Sheet');
-    }else{updateSyncStatus('ok','Sheet is empty');toast('Sheet appears empty');}
-  }catch(err){updateSyncStatus('err','Pull failed');toast('✗ Pull failed — check URL');}
+syncFromSheet = async function(silent=false){
+  return syncFromSheet(silent);
 };
 
 autoSync = async function(entry){
@@ -1422,6 +1448,14 @@ function initApp(){
   buildCatGrid();
   document.getElementById('f-date').value=today_();
   refreshAll();
+  // Auto-pull from sheet on every app open (silent — no toast unless new data arrives)
+  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
+  if(url) setTimeout(()=>syncFromSheet(true), 1200);
+  // Background sync every 2 minutes while app is open
+  setInterval(()=>{
+    const u=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
+    if(u) syncFromSheet(true);
+  }, 2 * 60 * 1000);
 }
 
 const storedHash = getStoredHash();
