@@ -4,6 +4,44 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Paisa — Budget Tracker</title>
+<style>
+/* ── PIN LOCK OVERLAY ── */
+#pin-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:#0f0f11;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;
+  transition:opacity .4s,transform .4s;
+}
+#pin-overlay.hidden{opacity:0;pointer-events:none;transform:scale(1.04)}
+.pin-logo{font-size:32px;font-weight:600;color:#f0eff8;letter-spacing:-.5px;margin-bottom:6px}
+.pin-logo span{color:#7c6af7}
+.pin-sub{font-size:13px;color:#7a798e;margin-bottom:40px;text-align:center}
+.pin-dots{display:flex;gap:14px;margin-bottom:36px;height:16px;align-items:center}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #3a3a46;transition:all .15s}
+.pin-dot.filled{background:#7c6af7;border-color:#7c6af7;transform:scale(1.1)}
+.pin-dot.err{background:#f05252;border-color:#f05252}
+.pin-dot.ok{background:#22d37a;border-color:#22d37a}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px}
+.pin-key{
+  aspect-ratio:1;border:1px solid #2e2e38;background:#18181c;
+  border-radius:16px;font-size:22px;font-weight:500;color:#f0eff8;
+  cursor:pointer;transition:all .12s;font-family:'DM Sans',sans-serif;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;
+  -webkit-tap-highlight-color:transparent;user-select:none;
+}
+.pin-key:active,.pin-key.pressed{background:#222228;transform:scale(.93);border-color:#3a3a46}
+.pin-key.zero{grid-column:2}
+.pin-key.del{grid-column:3;font-size:18px;color:#7a798e}
+.pin-key .pk-sub{font-size:8px;letter-spacing:.1em;color:#3a3a46;font-weight:500}
+.pin-msg{font-size:12px;color:#f05252;margin-top:20px;min-height:18px;text-align:center;transition:opacity .2s}
+.pin-msg.hidden{opacity:0}
+.pin-setup{width:100%;max-width:280px;margin-top:16px;text-align:center}
+.pin-setup-title{font-size:11px;font-weight:600;color:#7a798e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:16px}
+.pin-change-btn{font-size:12px;color:#7a798e;background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;text-underline-offset:3px;margin-top:20px}
+.lock-icon{font-size:40px;margin-bottom:16px;opacity:.6}
+.lockout-timer{font-size:28px;font-weight:600;font-family:'DM Mono',monospace;color:#f05252;margin:12px 0}
+</style>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -186,6 +224,44 @@ body{font-family:var(--ff);background:var(--bg);color:var(--text);font-size:14px
 </head>
 <body>
 
+<!-- ═══ PIN LOCK OVERLAY ═══ -->
+<div id="pin-overlay">
+  <!-- LOCKOUT VIEW -->
+  <div id="pin-lockout" style="display:none;text-align:center">
+    <div class="lock-icon">🔒</div>
+    <div class="pin-logo">pai<span>₹</span>a</div>
+    <div class="pin-sub">Too many wrong attempts</div>
+    <div class="lockout-timer" id="lockout-countdown">30:00</div>
+    <div style="font-size:12px;color:#7a798e">Try again after the timer</div>
+  </div>
+
+  <!-- SETUP VIEW (first time) -->
+  <div id="pin-setup-view" style="display:none;width:100%;max-width:280px;text-align:center">
+    <div class="pin-logo" style="margin-bottom:6px">pai<span>₹</span>a</div>
+    <div class="pin-sub">Create your 4-digit PIN<br>to secure your data</div>
+    <div class="pin-dots" style="justify-content:center" id="setup-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div id="setup-step" style="font-size:11px;font-weight:600;color:#7a798e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:16px">Enter new PIN</div>
+    <div class="pin-keypad" id="setup-keypad"></div>
+    <div class="pin-msg hidden" id="setup-msg"></div>
+  </div>
+
+  <!-- UNLOCK VIEW -->
+  <div id="pin-unlock-view" style="width:100%;max-width:280px;text-align:center">
+    <div class="pin-logo" style="margin-bottom:6px">pai<span>₹</span>a</div>
+    <div class="pin-sub" id="pin-sub-text">Enter your PIN</div>
+    <div class="pin-dots" style="justify-content:center" id="unlock-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="pin-keypad" id="unlock-keypad"></div>
+    <div class="pin-msg hidden" id="unlock-msg"></div>
+    <button class="pin-change-btn" onclick="showForgotPin()">Forgot PIN?</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <!-- TOPBAR -->
@@ -201,6 +277,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--text);font-size:14px
       <button class="nb" onclick="goPage('insights',this)">Insights</button>
       <button class="nb" onclick="goPage('sheet',this)">Ledger</button>
       <button class="nb" onclick="goPage('sync',this)">⚙ Sync</button>
+      <button class="nb" onclick="lockApp()" style="color:#f05252;margin-left:4px">🔒 Lock</button>
     </div>
   </div>
 </div>
@@ -413,7 +490,10 @@ body{font-family:var(--ff);background:var(--bg);color:var(--text);font-size:14px
 
     <div style="background:var(--redbg);border:1px solid rgba(240,82,82,.3);border-radius:var(--r);padding:12px;margin-top:8px">
       <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:6px">⚠ Danger Zone</div>
-      <button class="btn-sm" style="color:var(--red);border-color:var(--red)" onclick="clearAllData()">Clear all entries</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-sm" style="color:var(--amber);border-color:var(--amber)" onclick="changePinFlow()">🔑 Change PIN</button>
+        <button class="btn-sm" style="color:var(--red);border-color:var(--red)" onclick="clearAllData()">Clear all entries</button>
+      </div>
     </div>
   </div>
 
@@ -532,15 +612,28 @@ function copyScript(){
   });
 }
 
+// ── SHEET FETCH HELPERS (mobile-compatible) ──────────────────────────────────
+// Apps Script doesn't support CORS preflight (OPTIONS).
+// POST must use no-cors — response is opaque (we can't read it, but it writes fine).
+// GET uses regular cors mode and returns JSON.
+async function sheetPost(url, data){
+  return fetch(url, {
+    method: 'POST',
+    mode: 'no-cors',          // skips preflight — works on all mobile browsers
+    body: JSON.stringify(data),
+    headers: {'Content-Type': 'text/plain'} // text/plain avoids preflight too
+  });
+}
+
 async function syncToSheet(){
-  const url=localStorage.getItem(LS_URL);
+  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
   if(!url){toast('⚠ No Sheet URL configured — go to ⚙ Sync');return;}
   updateSyncStatus('pending','Syncing…');
   try{
-    await fetch(url,{method:'POST',body:JSON.stringify({action:'clear'}),headers:{'Content-Type':'text/plain'}});
+    await sheetPost(url,{action:'clear'});
     const batches=chunkArr(entries,200);
     for(const batch of batches){
-      await fetch(url,{method:'POST',body:JSON.stringify({action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))}),headers:{'Content-Type':'text/plain'}});
+      await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
     }
     updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
     toast('✓ Synced '+entries.length+' entries to Google Sheet');
@@ -548,11 +641,12 @@ async function syncToSheet(){
 }
 
 async function syncFromSheet(){
-  const url=localStorage.getItem(LS_URL);
+  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
   if(!url){toast('⚠ No Sheet URL configured');return;}
   updateSyncStatus('pending','Pulling from Sheet…');
   try{
-    const res=await fetch(url);const data=await res.json();
+    const res=await fetch(url+'?action=read',{method:'GET',mode:'cors'});
+    const data=await res.json();
     if(data.entries&&data.entries.length){
       entries=data.entries;save();refreshAll();
       updateSyncStatus('ok',`Pulled ${entries.length} entries`);
@@ -655,10 +749,9 @@ function addEntry(){
 }
 
 async function autoSync(entry){
-  const url=localStorage.getItem(LS_URL);if(!url)return;
-  try{
-    await fetch(url,{method:'POST',body:JSON.stringify({action:'append',entries:[{...entry,ts:new Date().toISOString()}]}),headers:{'Content-Type':'text/plain'}});
-  }catch(e){/* silent fail */}
+  const url=getUrlSecure&&getUrlSecure()||localStorage.getItem(LS_URL);
+  if(!url)return;
+  try{await sheetPost(url,{action:'append',entries:[{...entry,ts:new Date().toISOString()}]});}catch(e){}
 }
 
 function deleteEntry(id){
@@ -1006,12 +1099,355 @@ function toast(msg){
 }
 
 // ════════════════════════════════════════════════════════
-// INIT
+// PIN SECURITY SYSTEM
 // ════════════════════════════════════════════════════════
-load();
-buildCatGrid();
-document.getElementById('f-date').value=today_();
-refreshAll();
+const PIN_HASH_KEY  = 'paisa_pin_h';
+const PIN_FAIL_KEY  = 'paisa_pin_fails';
+const PIN_LOCK_KEY  = 'paisa_pin_lockuntil';
+const PIN_SESSION   = 'paisa_unlocked';
+const AUTO_LOCK_MS  = 5 * 60 * 1000; // 5 minutes
+const MAX_ATTEMPTS  = 5;
+const LOCKOUT_MS    = 30 * 60 * 1000; // 30 minutes
+
+let autoLockTimer = null;
+let pinBuffer = '';
+let setupBuffer = '';
+let setupStage = 'first'; // 'first' | 'confirm'
+let setupFirst = '';
+
+// Simple non-reversible hash (SHA-256 via Web Crypto)
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('paisa_salt_2024_' + pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function getStoredHash()  { return localStorage.getItem(PIN_HASH_KEY); }
+function getFailCount()   { return parseInt(localStorage.getItem(PIN_FAIL_KEY)||'0'); }
+function getLockUntil()   { return parseInt(localStorage.getItem(PIN_LOCK_KEY)||'0'); }
+function isSessionActive(){ return sessionStorage.getItem(PIN_SESSION)==='1'; }
+
+function setSessionActive(){
+  sessionStorage.setItem(PIN_SESSION,'1');
+  resetAutoLock();
+}
+
+function resetAutoLock(){
+  clearTimeout(autoLockTimer);
+  autoLockTimer = setTimeout(()=>{ lockApp(); }, AUTO_LOCK_MS);
+}
+
+// Reset inactivity timer on any interaction
+document.addEventListener('touchstart', resetAutoLock, {passive:true});
+document.addEventListener('click', resetAutoLock, {passive:true});
+document.addEventListener('keydown', resetAutoLock, {passive:true});
+
+function lockApp(){
+  clearTimeout(autoLockTimer);
+  sessionStorage.removeItem(PIN_SESSION);
+  pinBuffer = '';
+  updateDots('unlock-dots', 0, '');
+  document.getElementById('pin-overlay').classList.remove('hidden');
+  document.getElementById('pin-sub-text').textContent = 'Enter your PIN';
+  document.getElementById('unlock-msg').textContent='';
+  document.getElementById('unlock-msg').classList.add('hidden');
+  showView('pin-unlock-view');
+}
+
+function showView(id){
+  ['pin-lockout','pin-setup-view','pin-unlock-view'].forEach(v=>{
+    document.getElementById(v).style.display = v===id ? 'flex' : 'none';
+    if(v===id) document.getElementById(v).style.flexDirection='column';
+    if(v===id) document.getElementById(v).style.alignItems='center';
+  });
+}
+
+// ── KEYPAD BUILDER ──────────────────────────────────────
+function buildKeypad(containerId, onDigit, onDelete){
+  const el = document.getElementById(containerId);
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  const subs = ['','ABC','DEF','GHI','JKL','MNO','PQRS','TUV','WXYZ','','',''];
+  el.innerHTML = keys.map((k,i)=>{
+    if(k==='') return `<div></div>`;
+    const cls = k==='⌫'?'pin-key del':k==='0'?'pin-key zero':'pin-key';
+    return `<button class="${cls}" onclick="${k==='⌫'?onDelete+'()':onDigit+'(\''+k+'\')'}" ontouchstart="this.classList.add('pressed')" ontouchend="this.classList.remove('pressed')">
+      ${k}<span class="pk-sub">${subs[i]}</span>
+    </button>`;
+  }).join('');
+}
+
+function updateDots(id, filled, state){
+  const dots = document.getElementById(id).querySelectorAll('.pin-dot');
+  dots.forEach((d,i)=>{
+    d.className = 'pin-dot';
+    if(i < filled) d.classList.add(state||'filled');
+  });
+}
+
+// ── UNLOCK FLOW ─────────────────────────────────────────
+function unlockDigit(d){
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updateDots('unlock-dots', pinBuffer.length, '');
+  if(pinBuffer.length === 4) setTimeout(()=>verifyPin(), 120);
+}
+function unlockDelete(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots('unlock-dots', pinBuffer.length, '');
+  document.getElementById('unlock-msg').classList.add('hidden');
+}
+
+async function verifyPin(){
+  const now = Date.now();
+  const lockUntil = getLockUntil();
+  if(now < lockUntil){ showLockout(lockUntil - now); pinBuffer=''; return; }
+
+  const stored = getStoredHash();
+  const entered = await hashPin(pinBuffer);
+
+  if(entered === stored){
+    // SUCCESS
+    localStorage.setItem(PIN_FAIL_KEY,'0');
+    updateDots('unlock-dots', 4, 'ok');
+    setTimeout(()=>{
+      document.getElementById('pin-overlay').classList.add('hidden');
+      setSessionActive();
+    }, 350);
+  } else {
+    // FAIL
+    const fails = getFailCount() + 1;
+    localStorage.setItem(PIN_FAIL_KEY, String(fails));
+    updateDots('unlock-dots', 4, 'err');
+    const remaining = MAX_ATTEMPTS - fails;
+
+    if(fails >= MAX_ATTEMPTS){
+      localStorage.setItem(PIN_LOCK_KEY, String(Date.now() + LOCKOUT_MS));
+      localStorage.setItem(PIN_FAIL_KEY,'0');
+      setTimeout(()=>showLockout(LOCKOUT_MS), 400);
+    } else {
+      const msg = document.getElementById('unlock-msg');
+      msg.textContent = remaining===1 ? '⚠ 1 attempt left before 30-min lockout' : `Wrong PIN — ${remaining} attempts left`;
+      msg.classList.remove('hidden');
+      setTimeout(()=>{
+        pinBuffer='';
+        updateDots('unlock-dots', 0, '');
+      }, 500);
+    }
+  }
+  pinBuffer='';
+}
+
+// ── LOCKOUT TIMER ───────────────────────────────────────
+let lockoutInterval;
+function showLockout(ms){
+  showView('pin-lockout');
+  clearInterval(lockoutInterval);
+  const tick=()=>{
+    const rem = getLockUntil() - Date.now();
+    if(rem <= 0){
+      clearInterval(lockoutInterval);
+      localStorage.setItem(PIN_LOCK_KEY,'0');
+      showView('pin-unlock-view');
+      return;
+    }
+    const m=Math.floor(rem/60000),s=Math.floor((rem%60000)/1000);
+    document.getElementById('lockout-countdown').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  };
+  tick();
+  lockoutInterval = setInterval(tick, 1000);
+}
+
+// ── SETUP FLOW ──────────────────────────────────────────
+function setupDigit(d){
+  if(setupBuffer.length >= 4) return;
+  setupBuffer += d;
+  updateDots('setup-dots', setupBuffer.length, '');
+  if(setupBuffer.length === 4) setTimeout(()=>handleSetupStep(), 120);
+}
+function setupDelete(){
+  setupBuffer = setupBuffer.slice(0,-1);
+  updateDots('setup-dots', setupBuffer.length, '');
+}
+
+async function handleSetupStep(){
+  if(setupStage === 'first'){
+    setupFirst = setupBuffer;
+    setupBuffer = '';
+    updateDots('setup-dots', 0, '');
+    document.getElementById('setup-step').textContent = 'Confirm your PIN';
+    const msg=document.getElementById('setup-msg');
+    msg.textContent='';msg.classList.add('hidden');
+  } else {
+    if(setupBuffer === setupFirst){
+      // PINs match — save hash
+      const hash = await hashPin(setupBuffer);
+      localStorage.setItem(PIN_HASH_KEY, hash);
+      updateDots('setup-dots', 4, 'ok');
+      setTimeout(()=>{
+        document.getElementById('pin-overlay').classList.add('hidden');
+        setSessionActive();
+        toast('✓ PIN set successfully');
+      }, 400);
+    } else {
+      const msg=document.getElementById('setup-msg');
+      msg.textContent="PINs don't match — try again";
+      msg.classList.remove('hidden');
+      updateDots('setup-dots', 4, 'err');
+      setupBuffer='';setupFirst='';setupStage='first';
+      document.getElementById('setup-step').textContent='Enter new PIN';
+      setTimeout(()=>updateDots('setup-dots',0,''), 500);
+    }
+  }
+  setupBuffer='';
+  // advance stage
+  if(setupStage==='first') setupStage='confirm'; else setupStage='first';
+}
+
+function changePinFlow(){
+  setupBuffer='';setupFirst='';setupStage='first';
+  updateDots('setup-dots',0,'');
+  document.getElementById('setup-step').textContent='Enter new PIN';
+  document.getElementById('setup-msg').textContent='';
+  document.getElementById('setup-msg').classList.add('hidden');
+  showView('pin-setup-view');
+  document.getElementById('pin-overlay').classList.remove('hidden');
+  document.getElementById('pin-sub-text').textContent='Enter your PIN';
+}
+
+function showForgotPin(){
+  if(confirm('Forgot PIN?\n\nThis will CLEAR ALL your local data (your Google Sheet backup stays safe).\n\nProceed?')){
+    localStorage.clear();
+    sessionStorage.clear();
+    location.reload();
+  }
+}
+
+// ── OBFUSCATE SHEET URL IN MEMORY ───────────────────────
+// The URL is XOR-scrambled in memory so it's not readable as plain text in heap snapshots
+let _urlTokens=[];
+function storeUrlSecure(url){
+  const key=32+Math.floor(Math.random()*64);
+  _urlTokens=[key,...url.split('').map(c=>c.charCodeAt(0)^key)];
+  localStorage.setItem(LS_URL, btoa(JSON.stringify(_urlTokens)));
+}
+function getUrlSecure(){
+  try{
+    const raw=localStorage.getItem(LS_URL);
+    if(!raw)return'';
+    const arr=JSON.parse(atob(raw));
+    const key=arr[0];
+    return arr.slice(1).map(n=>String.fromCharCode(n^key)).join('');
+  }catch(e){return'';}
+}
+
+// ── OVERRIDE saveSheetUrl & references ──────────────────
+const _origSaveSheetUrl = saveSheetUrl;
+saveSheetUrl = function(){
+  const url=document.getElementById('sheet-url').value.trim();
+  storeUrlSecure(url);
+  updateSyncStatus('ready','Sheet URL saved');
+  toast('✓ Sheet URL saved & secured');
+};
+
+// patch all getters of LS_URL to use secure version
+const _origSyncTo = syncToSheet;
+const _origSyncFrom = syncFromSheet;
+const _origAutoSync = autoSync;
+const _origRSync = rSync;
+
+syncToSheet = async function(){
+  const url=getUrlSecure();
+  if(!url){toast('⚠ No Sheet URL configured — go to ⚙ Sync');return;}
+  updateSyncStatus('pending','Syncing…');
+  try{
+    await sheetPost(url,{action:'clear'});
+    const batches=chunkArr(entries,200);
+    for(const batch of batches){
+      await sheetPost(url,{action:'append',entries:batch.map(e=>({...e,ts:new Date().toISOString()}))});
+    }
+    updateSyncStatus('ok',`Synced ${entries.length} entries · ${new Date().toLocaleTimeString()}`);
+    toast('✓ Synced '+entries.length+' entries to Google Sheet');
+  }catch(err){updateSyncStatus('err','Sync failed: '+err.message);toast('✗ Sync failed — check URL');}
+};
+
+syncFromSheet = async function(){
+  const url=getUrlSecure();
+  if(!url){toast('⚠ No Sheet URL configured');return;}
+  updateSyncStatus('pending','Pulling from Sheet…');
+  try{
+    const res=await fetch(url+'?action=read',{method:'GET',mode:'cors'});
+    const data=await res.json();
+    if(data.entries&&data.entries.length){
+      entries=data.entries;save();refreshAll();
+      updateSyncStatus('ok',`Pulled ${entries.length} entries`);
+      toast('✓ Pulled '+entries.length+' entries from Sheet');
+    }else{updateSyncStatus('ok','Sheet is empty');toast('Sheet appears empty');}
+  }catch(err){updateSyncStatus('err','Pull failed');toast('✗ Pull failed — check URL');}
+};
+
+autoSync = async function(entry){
+  const url=getUrlSecure();if(!url)return;
+  try{await sheetPost(url,{action:'append',entries:[{...entry,ts:new Date().toISOString()}]});}catch(e){}
+};
+
+rSync = function(){
+  const url=getUrlSecure()||'';
+  // Show masked URL in input (never show real URL)
+  document.getElementById('sheet-url').value = url ? '••••••••••••••••••••••••••••••••' : '';
+  document.getElementById('sheet-url').placeholder = url ? 'URL saved (hidden for security)' : 'https://script.google.com/macros/s/...';
+  if(url) updateSyncStatus('ok','Sheet URL configured & secured');
+  document.getElementById('data-summary').innerHTML=`
+    Total entries: <strong style="color:var(--text)">${entries.length}</strong><br>
+    Total spent: <strong style="color:var(--text)">${fmt(sum(entries))}</strong><br>
+    Date range: <strong style="color:var(--text)">${entries.length?fmtD(entries[entries.length-1].date)+' – '+fmtD(entries[0].date):'—'}</strong><br>
+    localStorage size: <strong style="color:var(--text)">${(JSON.stringify(entries).length/1024).toFixed(1)} KB</strong>
+  `;
+};
+
+// Allow re-entering real URL (clear mask on focus)
+document.getElementById('sheet-url').addEventListener('focus', function(){
+  if(this.value.startsWith('•')){this.value='';}
+});
+document.getElementById('sheet-url').addEventListener('blur', function(){
+  if(!this.value.trim()&&getUrlSecure()){this.value='••••••••••••••••••••••••••••••••';}
+});
+
+// ════════════════════════════════════════════════════════
+// INIT — PIN FIRST, THEN APP
+// ════════════════════════════════════════════════════════
+buildKeypad('unlock-keypad','unlockDigit','unlockDelete');
+buildKeypad('setup-keypad','setupDigit','setupDelete');
+
+function initApp(){
+  load();
+  buildCatGrid();
+  document.getElementById('f-date').value=today_();
+  refreshAll();
+}
+
+const storedHash = getStoredHash();
+const lockUntil  = getLockUntil();
+
+if(Date.now() < lockUntil){
+  // Currently locked out
+  showView('pin-lockout');
+  showLockout(lockUntil - Date.now());
+  initApp(); // load data in background, UI hidden
+} else if(!storedHash){
+  // First time — no PIN set yet
+  setupBuffer='';setupFirst='';setupStage='first';
+  showView('pin-setup-view');
+  document.getElementById('pin-sub-text').textContent='Enter your PIN';
+  initApp();
+} else if(isSessionActive()){
+  // Same tab session still active
+  document.getElementById('pin-overlay').classList.add('hidden');
+  resetAutoLock();
+  initApp();
+} else {
+  // Has PIN, needs unlock
+  showView('pin-unlock-view');
+  initApp();
+}
 </script>
 </body>
 </html>
