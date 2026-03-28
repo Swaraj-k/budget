@@ -549,11 +549,28 @@ const charts={};
 // ════════════════════════════════════════════════════════
 // STORAGE — localStorage ONLY (no demo reset)
 // ════════════════════════════════════════════════════════
+function normaliseDate(d){
+  if(!d) return '';
+  const s = String(d).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // already YYYY-MM-DD
+  const dt = new Date(s);
+  if(!isNaN(dt.getTime())){
+    const y=dt.getFullYear();
+    const m=String(dt.getMonth()+1).padStart(2,'0');
+    const day=String(dt.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+  return s.substring(0,10);
+}
+
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
-    if(raw){entries=JSON.parse(raw);}
-    else{entries=[];} // empty on first run, no demo data
+    if(raw){
+      const parsed = JSON.parse(raw);
+      // Fix any corrupted dates already in storage
+      entries = parsed.map(e => ({...e, date: normaliseDate(e.date)}));
+    } else { entries=[]; }
   }catch(e){entries=[];}
   const url=localStorage.getItem(LS_URL)||'';
   if(url){document.getElementById('sheet-url').value=url;updateSyncStatus('ready','Sheet URL configured');}
@@ -617,7 +634,19 @@ function doGet(e) {
   for (var i = 1; i < rows.length; i++) {
     var r = rows[i];
     if (!r[0]) continue;
-    entries.push({id:String(r[0]),date:String(r[1]),desc:String(r[2]),cat:String(r[3]),amount:Number(r[4]),pay:String(r[5]),tag:String(r[6]||""),notes:String(r[7]||"")});
+    // Format date as YYYY-MM-DD regardless of how Sheets stores it internally
+    var dateVal = r[1];
+    var dateStr;
+    if (dateVal instanceof Date) {
+      var y = dateVal.getFullYear();
+      var m = String(dateVal.getMonth()+1).padStart('0',2);
+      var d = String(dateVal.getDate()).padStart('0',2);
+      dateStr = y+'-'+m+'-'+d;
+    } else {
+      // Already a string (e.g. "2026-03-18") — normalise it
+      dateStr = String(dateVal).substring(0,10);
+    }
+    entries.push({id:String(r[0]),date:dateStr,desc:String(r[2]),cat:String(r[3]),amount:Number(r[4]),pay:String(r[5]),tag:String(r[6]||""),notes:String(r[7]||"")});
   }
   return ContentService.createTextOutput(JSON.stringify({entries:entries})).setMimeType(ContentService.MimeType.JSON);
 }`;
@@ -673,11 +702,9 @@ async function syncToSheet(silent=false){
 // Local-only entries (not yet pushed) are preserved too.
 function mergeEntries(sheetEntries, localEntries){
   const merged = {};
-  // Sheet entries first (they are the master record)
-  sheetEntries.forEach(e => { merged[e.id] = e; });
-  // Local entries fill in anything the sheet doesn't have yet
-  localEntries.forEach(e => { if(!merged[e.id]) merged[e.id] = e; });
-  // Sort newest first by date then id
+  // Normalise dates on sheet entries before merging
+  sheetEntries.forEach(e => { merged[e.id] = {...e, date: normaliseDate(e.date)}; });
+  localEntries.forEach(e  => { if(!merged[e.id]) merged[e.id] = {...e, date: normaliseDate(e.date)}; });
   return Object.values(merged).sort((a,b)=>{
     if(b.date !== a.date) return b.date.localeCompare(a.date);
     return b.id.localeCompare(a.id);
